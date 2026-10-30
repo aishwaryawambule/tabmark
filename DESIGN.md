@@ -2,8 +2,7 @@
 
 ## Brief
 
-Request, word for word:
-"on what we can create and start creating use desig lounge skill and also /frontend-design:frontend-design to create the product an donce coplete let me know before pushing to my personal github"
+Request: build the product for this gap with a considered design, and check with the owner before publishing it.
 
 Product: Tabmark (working name, replace). An open-source page that measures how fast a small AI language model runs in this browser tab on this device, compares engines (WebLLM, wllama) and KV-cache memory formats (f16, q8_0, q4_0), finds the longest context the device can load, and adds the result to a public results table. The gap it fills: there are browser benchmarks from one machine, and phone leaderboards for native apps, but no public, crowdsourced table of browser numbers across phones and laptops.
 For: a developer deciding whether in-browser AI is fast enough on the devices their users have, or a hobbyist curious what their phone can do. In the first ten seconds they want to know how long the test takes, how much it downloads, and what they will get.
@@ -28,8 +27,8 @@ Done means: Run, Results and Method screens, plus the empty and failed-load stat
 ## Pick
 
 - Recipe: `web-app`, direction **Records** ("A public tool, pale and plain, one table people finish"). World words (test bench, stopwatch, record book) match "one table people finish". Recent: dashboard/civic used today for another product; web-app has no recent line.
-- Theme: Ice Station, "Pale, northern, a little severe. Blue-gray air." https://www.designlounge.live/themes/ice-station
-- Pairing: Academic, Literata display + Public Sans text, no mono, numbers in Public Sans tabular. https://www.designlounge.live/type/academic
+- Theme (replaced, see Defaults set aside): Ice Station, "Pale, northern, a little severe. Blue-gray air." https://www.designlounge.live/themes/ice-station
+- Pairing (replaced): Academic, Literata display + Public Sans text, no mono, numbers in Public Sans tabular. https://www.designlounge.live/type/academic
 - Family: Quiet. Radius 6px controls, 8px cards. One solid primary, outline secondary, 40px web / 44px phone. Hairlines 1px, no shadow on tables. Focus ring 2px accent, 3px offset.
 
 ## Sources
@@ -85,7 +84,9 @@ Motion: UI 200ms, layout 320ms, `cubic-bezier(0.2, 0.7, 0.2, 1)`. The only movin
 
 ## Defaults set aside
 
-- The dense-data-table brief uses uppercase 11px headers. Headers here are sentence case 13px, per the frontend-design rule against all-caps labels.
+- 2026-10-31, at the owner's request ("so it does not feel wholly Design Lounge"): the Ice Station theme and Academic pairing were replaced with Tabmark's own tokens (`src/styles/tokens.css`): neutral paper #f2f3f0, ink #16191d, lane green #0b6e4f, and one family, Archivo, at three widths (wide headings, condensed readouts, normal text). Corners 4px / 6px. Layout, structure and the piece briefs it was built from are unchanged.
+
+- The dense-data-table brief uses uppercase 11px headers. Headers here are sentence case 13px, because all-caps labels read as template chrome.
 
 Designed using Design Lounge (https://www.designlounge.live).
 

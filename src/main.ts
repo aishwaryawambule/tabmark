@@ -1,5 +1,4 @@
-import "./styles/theme.css";
-import "./styles/type.css";
+import "./styles/tokens.css";
 import "./styles/app.css";
 import { renderMethod } from "./ui/method";
 import { renderResults } from "./ui/results";

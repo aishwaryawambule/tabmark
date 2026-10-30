@@ -203,7 +203,10 @@ export function renderRun(root: HTMLElement) {
       ...(context ? { context } : {}),
     };
     const ctx = context?.largestOk ? ` It held a conversation of ${context.largestOk.toLocaleString("en-US")} tokens.` : "";
+    const ok = tests.filter((t) => t.status === "ok" && t.decodeTps);
+    const best = ok.length ? Math.max(...ok.map((t) => t.decodeTps!)) : null;
     answerSlot.replaceChildren(
+      ...(best ? [h("div", { class: "readout", "aria-hidden": "true" }, h("span", { class: "big" }, fmtSpeed(best)), h("span", { class: "u" }, "tokens a second"))] : []),
       h("p", { class: "answer", role: "status" }, answerSentence(named, tests)),
       h("p", { class: "answer-sub" }, `Qwen3 0.6B, ${named.browser} ${named.browser === "Unknown" ? "" : named.browserVersion}. Writing is how fast it produces new text; reading is how fast it takes in your prompt.${ctx}`.replace("  ", " ")));
     answerSlot.hidden = false;
