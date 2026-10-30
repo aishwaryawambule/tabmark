@@ -75,10 +75,12 @@ export function renderStory(root: HTMLElement) {
     const ctx = contextRows(all()).filter((r) => r.model === model);
     drawStats(rows.filter((r) => r.model === model), ctx);
     figs.replaceChildren(
-      figure("Writing speed", "Tokens per second, 16-bit memory", ENGINE_SERIES,
-        speedRows(rows, youKeys), (host, data) => dotPlot(host, data, ENGINE_SERIES, { unit: "tok/s", title: `Writing speed by device, ${name}` }), name),
-      figure("Smaller memory, same model", "wllama, tokens per second", KV_SERIES,
-        memoryRows(rows, youKeys), (host, data) => dotPlot(host, data, KV_SERIES, { unit: "tok/s", title: `Writing speed by memory format, ${name}` }), name),
+      figure("Writing speed", "How fast each device writes new text. Tokens per second, 16-bit memory.", ENGINE_SERIES,
+        speedRows(rows, youKeys), (host, data) => dotPlot(host, data, ENGINE_SERIES, { unit: "tok/s", title: `Writing speed by device, ${name}` }),
+        { text: `No ${name} runs yet.`, action: "Set up the test", prep: {} }),
+      figure("Smaller memory, same model", "How much speed you lose by storing the conversation in 8 or 4 bits instead of 16. Fewer bits fit longer chats. Tokens per second, wllama.", KV_SERIES,
+        memoryRows(rows, youKeys), (host, data) => dotPlot(host, data, KV_SERIES, { unit: "tok/s", title: `Writing speed by memory format, ${name}` }),
+        { text: `No ${name} runs of the Full test yet. It runs wllama with 16, 8 and 4-bit memory.`, action: "Set up the Full test", prep: { pack: "full" } }),
       contextFigure(ctx, youKeys, name),
       memoryFigure());
     drawTable(rows, youKeys);
@@ -135,12 +137,19 @@ export function renderStory(root: HTMLElement) {
     return [...by.values()].sort((a, b) => Math.max(...b.values.map((v) => v.value)) - Math.max(...a.values.map((v) => v.value)));
   }
 
-  function figure(title: string, sub: string, series: Series[], data: DotRow[], draw: (host: HTMLElement, data: DotRow[]) => () => void, name: string) {
+  type Empty = { text: string; action: string; prep: { pack?: "quick" | "full"; probe?: boolean } };
+  function emptyBox(e: Empty) {
+    const b = h("button", { class: "btn outline", type: "button" }, e.action);
+    b.addEventListener("click", () => tester.prepare(e.prep));
+    return h("div", { class: "empty-plot" }, h("p", {}, e.text), b);
+  }
+
+  function figure(title: string, sub: string, series: Series[], data: DotRow[], draw: (host: HTMLElement, data: DotRow[]) => () => void, empty: Empty) {
     const host = h("div", { class: "plot" });
     const fig = h("figure", { class: "fig" },
       h("h2", {}, title), h("p", { class: "sub" }, sub),
       data.length ? h("div", { class: "legend", "aria-hidden": "true" }, series.map((s) => h("span", {}, h("i", { style: `background:${s.color}` }), s.label))) : null,
-      data.length ? host : h("p", { class: "empty-plot" }, `No ${name} runs yet. Run the test to add the first.`));
+      data.length ? host : emptyBox(empty));
     if (data.length) requestAnimationFrame(() => cleanups.push(draw(host, data)));
     return fig;
   }
@@ -151,8 +160,8 @@ export function renderStory(root: HTMLElement) {
       detail: r.largestOk ? `${r.largestOk.toLocaleString("en-US")} tokens loaded` : "Not even 4,096 tokens loaded" }));
     const fig = h("figure", { class: "fig" },
       h("h2", {}, "Longest conversation that loaded"),
-      h("p", { class: "sub" }, "Tokens, WebLLM"),
-      data.length ? host : h("p", { class: "empty-plot" }, `No ${name} runs with the conversation check yet.`));
+      h("p", { class: "sub" }, "The longest chat each device's memory could hold. Tokens, WebLLM."),
+      data.length ? host : emptyBox({ text: `No ${name} runs with the conversation check yet. It loads the model with room for 4,096 up to 32,768 tokens.`, action: "Set up the conversation check", prep: { probe: true } }));
     if (data.length) requestAnimationFrame(() => cleanups.push(barChart(host, data, { unit: "tokens", title: `Longest conversation, ${name}`, color: "var(--webllm)" })));
     return fig;
   }

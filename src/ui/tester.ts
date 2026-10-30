@@ -218,8 +218,22 @@ export function renderTester(root: HTMLElement, onResult: (r: Result) => void, o
     start.disabled = false;
   })();
 
-  return { setModel(id: string) {
-    const input = models.querySelector<HTMLInputElement>(`input[value="${id}"]`);
-    if (input && !running) { input.checked = true; modelId = id; draw(); }
-  } };
+  return {
+    setModel(id: string) {
+      const input = models.querySelector<HTMLInputElement>(`input[value="${id}"]`);
+      if (input && !running) { input.checked = true; modelId = id; draw(); }
+    },
+    // Ticks the options a chart needs, then brings the card into view with Start focused.
+    prepare(opts: { pack?: Pack; probe?: boolean }) {
+      if (running) return;
+      if (opts.pack) {
+        pack = opts.pack;
+        packs.querySelector<HTMLInputElement>(`input[value="${opts.pack}"]`)!.checked = true;
+      }
+      if (opts.probe) probe.checked = true;
+      draw();
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+      start.focus({ preventScroll: true });
+    },
+  };
 }
