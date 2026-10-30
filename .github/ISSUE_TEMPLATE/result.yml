@@ -1,0 +1,16 @@
+name: Test result
+description: Opened by the test page. Adds one run to the public results.
+title: "Result: "
+labels: ["result"]
+body:
+  - type: markdown
+    attributes:
+      value: The test page filled this in. Submit it as it is; a check adds it to the public table and closes the issue.
+  - type: textarea
+    id: result
+    attributes:
+      label: Result
+      description: Do not edit. Anything that does not pass the checks is not added.
+      render: json
+    validations:
+      required: true

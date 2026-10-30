@@ -1,0 +1,49 @@
+name: Add result
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: results-data
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    if: contains(github.event.issue.labels.*.name, 'result')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: ingest
+        run: node scripts/ingest.mjs
+      - if: steps.ingest.outputs.status == 'added'
+        run: |
+          git config user.name "tabmark-results"
+          git config user.email "tabmark-results@users.noreply.github.com"
+          git add public/data/results.json
+          git commit -m "data: add result from #${{ github.event.issue.number }}"
+          git push
+      # A push made with GITHUB_TOKEN does not start other workflows; a dispatch does.
+      - if: steps.ingest.outputs.status == 'added'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          MESSAGE: ${{ steps.ingest.outputs.message }}
+          STATUS: ${{ steps.ingest.outputs.status }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body "$MESSAGE"
+          if [ "$STATUS" = "invalid" ]; then
+            gh issue close ${{ github.event.issue.number }} --reason "not planned"
+          else
+            gh issue close ${{ github.event.issue.number }} --reason completed
+          fi

@@ -1,0 +1,27 @@
+{
+  "name": "tabmark",
+  "version": "0.1.0",
+  "private": true,
+  "description": "How fast does AI run in your browser tab? A crowdsourced benchmark for in-browser LLMs on phones and laptops.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "ingest": "node scripts/ingest.mjs"
+  },
+  "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.86",
+    "@wllama/wllama": "^3.8.1"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.74",
+    "puppeteer-core": "^25.16.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}
