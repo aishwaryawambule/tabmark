@@ -8,6 +8,7 @@ import { median } from "./stats";
 
 export interface TableRow {
   key: string;
+  dkey: string; // the device and browser; shared by every engine and format from it
   device: string;
   kind: string;
   os: string;
@@ -46,6 +47,7 @@ export function tableRows(results: unknown[]): TableRow[] {
     const t = g.r.tests.find((x) => key.endsWith(`|${x.engine}|${x.model}|${x.kv}`))!;
     rows.push({
       key,
+      dkey: deviceKey(d),
       device: deviceName(d).replace(/^This /, ""),
       kind: d.kind,
       os: d.os,
@@ -64,3 +66,32 @@ export function tableRows(results: unknown[]): TableRow[] {
 }
 
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+
+export interface ContextRow {
+  dkey: string;
+  device: string;
+  kind: string;
+  model: string;
+  largestOk: number; // 0 when nothing loaded
+  runs: number;
+}
+
+// The longest conversation that loaded, per device and model: the best any run reached.
+export function contextRows(results: unknown[]): ContextRow[] {
+  const seen = new Set<string>();
+  const out = new Map<string, ContextRow>();
+  for (const raw of results) {
+    if (validateResult(raw).length) continue;
+    const r = raw as Result;
+    if (seen.has(r.id) || !r.context) continue;
+    seen.add(r.id);
+    const key = `${deviceKey(r.device)}|${r.context.model}`;
+    const prev = out.get(key);
+    const ok = r.context.largestOk ?? 0;
+    out.set(key, {
+      dkey: deviceKey(r.device), device: deviceName(r.device).replace(/^This /, ""), kind: r.device.kind,
+      model: r.context.model, largestOk: Math.max(prev?.largestOk ?? 0, ok), runs: (prev?.runs ?? 0) + 1,
+    });
+  }
+  return [...out.values()].sort((a, b) => b.largestOk - a.largestOk);
+}

@@ -3,11 +3,16 @@
 How fast does AI run in your browser tab? Tabmark times a small language model on your own phone or computer, right in the browser, and adds the result to a public table so you can compare devices.
 
 - **Runs in the tab.** The model downloads into the browser and runs on the device's graphics chip through WebGPU. No server, no account.
-- **Two engines, three memory formats.** [WebLLM](https://github.com/mlc-ai/web-llm) and [wllama](https://github.com/ngxson/wllama) (llama.cpp) on the same model, Qwen3 0.6B, with wllama's conversation memory (KV cache) in 16, 8 and 4 bits.
+- **Two engines, three memory formats.** [WebLLM](https://github.com/mlc-ai/web-llm) and [wllama](https://github.com/ngxson/wllama) (llama.cpp) on the same model, with wllama's conversation memory (KV cache) in 16, 8 and 4 bits.
+- **Five models to pick from.** SmolLM2 360M, Qwen3 0.6B (default), Llama 3.2 1B, Qwen3 1.7B and Qwen3 4B, from about 0.2 to 2.3 GB. Qwen3 4B runs in WebLLM only: its llama.cpp file is over wllama's 2 GB single-file limit.
 - **Longest conversation.** Optionally loads the model with room for 4k to 32k tokens and reports the largest that fits.
 - **Crowdsourced and open.** Sharing opens a prefilled GitHub issue. A GitHub Action validates it and appends it to [`public/data/results.json`](public/data/results.json), which anyone can download.
 
 Why: browser LLM benchmarks so far come from one machine at a time, and phone leaderboards cover native apps. There is no public table of in-browser numbers across the phones and laptops people actually use.
+
+## The page
+
+One page, read like a news graphic: pick a model, see writing speed by device (WebLLM and wllama), what 8-bit and 4-bit memory cost in speed, the longest conversation each device loaded, and how much memory a long chat needs for each model. The test sits beside the charts; your own run appears on them, highlighted, before you share it.
 
 ## What is measured
 
@@ -51,7 +56,7 @@ It fails on any uncaptured WebGPU error. Those are only console warnings, and th
 ```
 src/core/      pure logic, unit tested: device detection, result format and validation, plan, results table, trace
 src/engines/   WebLLM and wllama adapters: load, warm up, stream, report timings
-src/ui/        Run, Results and Method screens (no framework)
+src/ui/        the page (story.ts), the SVG charts (charts.ts) and the test card (tester.ts); no framework
 scripts/       ingest.mjs (GitHub Action), e2e.mjs, shots.mjs
 .github/       issue form and the two workflows
 ```
@@ -60,4 +65,4 @@ Adding an engine means one function that loads a model, streams one completion a
 
 ## Licence
 
-MIT. Models: Qwen3 0.6B from Alibaba's Qwen team (Apache 2.0). Designed using [Design Lounge](https://www.designlounge.live).
+MIT. Models: Qwen3 (Alibaba Qwen team, Apache 2.0), Llama 3.2 (Meta, Llama 3.2 Community License), SmolLM2 (Hugging Face, Apache 2.0). Designed using [Design Lounge](https://www.designlounge.live).

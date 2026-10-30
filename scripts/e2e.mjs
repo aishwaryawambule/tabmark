@@ -34,8 +34,9 @@ try {
   // Puppeteer's simulated mouse and tap do not reliably land with touch emulation on,
   // so press controls through the DOM; the page's own handlers run either way.
   const press = (sel) => page.$eval(sel, (el) => el.click());
-  await page.goto(`${base}#/run`, { waitUntil: "networkidle0" });
+  await page.goto(base, { waitUntil: "networkidle0" });
   await page.waitForSelector(".btn.primary:not([disabled])");
+  if (process.env.MODEL) await press(`input[name="model"][value="${process.env.MODEL}"]`);
   if (pack === "full") await press('input[value="full"]');
   if (probe === "probe") await press("#probe");
   await page.type("#device-name", "MacBook Pro (Apple M5 Pro)");
@@ -49,7 +50,7 @@ try {
   // Read the result first: switching to a mobile viewport reloads the page.
   const result = await page.evaluate(() => window.__TABMARK_RESULT__);
   await writeFile(out, JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result.tests.map((t) => [t.engine, t.kv, t.status, t.prefillTps, t.decodeTps, t.error])), JSON.stringify(result.context ?? null));
+  console.log(result.tests[0]?.model, JSON.stringify(result.tests.map((t) => [t.engine, t.weights, t.kv, t.status, t.prefillTps, t.decodeTps, t.error])), JSON.stringify(result.context ?? null));
 } catch (e) {
   failed = failed ?? String(e);
   // Leave evidence: what the page showed and what each row said when it failed.

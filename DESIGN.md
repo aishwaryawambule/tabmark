@@ -106,3 +106,8 @@ Fails: none
 - Full run end to end in Chrome (WebGPU, Apple M5 Pro): WebLLM and wllama in 16, 8 and 4-bit memory, plus the longest-conversation probe (32,768 tokens fit). No WebGPU errors. Same on the production build.
 - Phone 390x844: run, finished state, results with selection and compare. No horizontal overflow on any screen.
 - Found and fixed while looking: shader compilation inflated the first request (reading speed 177 instead of about 1,700 tok/s), so each engine now gets an untimed warm-up; the sticky bar could cover a scrolled-to control (scroll-padding-top); ticking a results checkbox rebuilt the table and dropped keyboard focus.
+
+
+## Redesign, 2026-10-31: data journalism
+
+At the owner's request the page became a news-style data story: headline, model tabs, a strip of three big numbers, four charts (writing speed by device, speed by memory format, longest conversation, memory one long chat needs), every result in a table, and a short method list. The test is a sticky sidebar card. White page and black ink; colour only for data (WebLLM #2a78d6, wllama #eb6834, memory formats an orange ramp #a8421b / #eb6834 / #f2a07b), each palette checked for colour-blind separation and contrast. Type: Newsreader for text, IBM Plex Sans for charts and controls. Charts are hand-built SVG: hairline grid, dots with a page-colour ring, bars with 4px rounded ends, labels only where they help, a tooltip on every mark (hover or keyboard). No captions or filler copy.

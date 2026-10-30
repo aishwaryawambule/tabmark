@@ -28,3 +28,23 @@ describe("tableRows", () => {
     expect(tableRows([res("r-aaaaaa1", "MacBook", 50), res("r-aaaaaa1", "MacBook", 50)] as any)[0].runs).toBe(1);
   });
 });
+
+import { contextRows } from "../src/core/aggregate";
+
+describe("device grouping and context", () => {
+  it("rows carry the device key, shared by every engine and format from that device", () => {
+    const r = res("r-aaaaaa1", "MacBook", 50);
+    r.tests.push({ ...r.tests[0], engine: "wllama", kv: "q8_0", decodeTps: 40 });
+    const rows = tableRows([r] as any);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].dkey).toBe(rows[1].dkey);
+    expect(rows[0].dkey).toContain("macbook");
+  });
+  it("contextRows keeps the largest window that loaded per device and model", () => {
+    const a = { ...res("r-aaaaaa1", "MacBook", 50), context: { engine: "webllm", model: "Qwen3-0.6B", largestOk: 16384, firstFailed: 32768 } };
+    const b = { ...res("r-aaaaaa2", "MacBook", 50), context: { engine: "webllm", model: "Qwen3-0.6B", largestOk: 32768, firstFailed: null } };
+    const c = { ...res("r-aaaaaa3", "Phone", 9), context: { engine: "webllm", model: "Qwen3-0.6B", largestOk: null, firstFailed: 4096 } };
+    const rows = contextRows([a, b, c] as any);
+    expect(rows.map((r) => [r.device, r.model, r.largestOk, r.runs])).toEqual([["MacBook", "Qwen3-0.6B", 32768, 2], ["Phone", "Qwen3-0.6B", 0, 1]]);
+  });
+});
