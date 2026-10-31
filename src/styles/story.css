@@ -16,6 +16,8 @@
   --kv-16: #a8421b;         /* ordinal: more bits, darker */
   --kv-8: #eb6834;
   --kv-4: #f2a07b;
+  --gpu: var(--webllm);     /* speech charts reuse the validated pair */
+  --cpu: var(--wllama);
   --good: #0a7d0a;
   --bad: #b42318;
   --serif: "Newsreader", Georgia, "Times New Roman", serif;

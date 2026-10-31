@@ -14,8 +14,10 @@
     "ingest": "node scripts/ingest.mjs"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "@mlc-ai/web-llm": "^0.2.86",
-    "@wllama/wllama": "^3.8.1"
+    "@wllama/wllama": "^3.8.1",
+    "kokoro-js": "^1.2.1"
   },
   "devDependencies": {
     "@webgpu/types": "^0.1.74",

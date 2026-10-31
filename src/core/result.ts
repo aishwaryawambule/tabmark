@@ -2,6 +2,7 @@
 // JSON before submitting, and the ingest Action accepts nothing else.
 
 import type { Device } from "./device";
+import { BACKENDS, SPEECH_TASKS, type Backend, type SpeechTask } from "./speech";
 
 export const ENGINES = ["webllm", "wllama"] as const;
 export const KV_FORMATS = ["f16", "q8_0", "q4_0", "int8"] as const;
@@ -30,6 +31,23 @@ export interface ContextResult {
   firstFailed: number | null;
 }
 
+// One speech step: speaking (text to audio) or listening (audio to text) on one backend.
+export interface SpeechResult {
+  task: SpeechTask;
+  engineVersion: string;
+  model: string;
+  backend: Backend;
+  dtype: string;
+  status: "ok" | "failed" | "skipped";
+  loadMs?: number;
+  audioSec?: number; // seconds of audio spoken or transcribed
+  computeMs?: number;
+  realTime?: number; // audio seconds per second of work
+  firstAudioMs?: number; // speaking: from start until the first sentence is ready
+  wordErrors?: number; // 0..1: speaking, the listening model's errors on this voice; listening, its errors on the human clip
+  error?: string;
+}
+
 export interface Result {
   v: 1;
   id: string;
@@ -38,9 +56,11 @@ export interface Result {
   device: Device;
   tests: TestResult[];
   context?: ContextResult;
+  speech?: SpeechResult[];
 }
 
-const TOP = ["v", "id", "createdAt", "app", "device", "tests", "context"];
+const TOP = ["v", "id", "createdAt", "app", "device", "tests", "context", "speech"];
+const SPEECH = ["task", "engineVersion", "model", "backend", "dtype", "status", "loadMs", "audioSec", "computeMs", "realTime", "firstAudioMs", "wordErrors", "error"];
 const DEVICE = ["kind", "os", "osVersion", "browser", "browserVersion", "model", "gpuVendor", "gpuArchitecture", "gpuDescription", "cores", "memoryGB"];
 const TEST = ["engine", "engineVersion", "model", "weights", "kv", "status", "promptTokens", "genTokens", "prefillTps", "decodeTps", "loadMs", "error"];
 const CONTEXT = ["engine", "model", "largestOk", "firstFailed"];
@@ -80,7 +100,9 @@ export function validateResult(r: unknown): string[] {
     if (d.memoryGB !== null) num(d.memoryGB, "device.memoryGB", 0.25, 1024, true);
   }
 
-  if (!Array.isArray(r.tests) || r.tests.length < 1 || r.tests.length > 12) errs.push("tests must have 1 to 12 entries");
+  // A run has language-model tests, speech steps, or both.
+  const hasSpeech = Array.isArray(r.speech) && r.speech.length > 0;
+  if (!Array.isArray(r.tests) || r.tests.length < (hasSpeech ? 0 : 1) || r.tests.length > 12) errs.push(hasSpeech ? "tests must have 0 to 12 entries" : "tests must have 1 to 12 entries");
   else r.tests.forEach((t, i) => {
     const at = `tests[${i}]`;
     if (!obj(t)) return void errs.push(`${at} is not an object`);
@@ -107,6 +129,26 @@ export function validateResult(r: unknown): string[] {
       text(c.model, "context.model", 40);
       for (const k of ["largestOk", "firstFailed"]) if (c[k] !== null) num(c[k], `context.${k}`, 1, 10_000_000, true);
     }
+  }
+  if (r.speech !== undefined) {
+    if (!Array.isArray(r.speech) || r.speech.length < 1 || r.speech.length > 8) errs.push("speech must have 1 to 8 entries");
+    else r.speech.forEach((t, i) => {
+      const at = `speech[${i}]`;
+      if (!obj(t)) return void errs.push(`${at} is not an object`);
+      extra(t, SPEECH, `${at}.`);
+      if (!SPEECH_TASKS.includes(t.task as SpeechTask)) errs.push(`${at}.task is not valid`);
+      if (!BACKENDS.includes(t.backend as Backend)) errs.push(`${at}.backend is not valid`);
+      for (const k of ["engineVersion", "model", "dtype"]) text(t[k], `${at}.${k}`, 40);
+      if (!["ok", "failed", "skipped"].includes(t.status as string)) errs.push(`${at}.status is not valid`);
+      const ok = t.status === "ok";
+      num(t.loadMs, `${at}.loadMs`, 0, 3_600_000, false);
+      num(t.audioSec, `${at}.audioSec`, 0.1, 600, ok);
+      num(t.computeMs, `${at}.computeMs`, 1, 3_600_000, ok);
+      num(t.realTime, `${at}.realTime`, 0.001, 10_000, ok);
+      num(t.firstAudioMs, `${at}.firstAudioMs`, 1, 3_600_000, false);
+      num(t.wordErrors, `${at}.wordErrors`, 0, 1, false);
+      text(t.error, `${at}.error`, 200, false);
+    });
   }
   return errs;
 }

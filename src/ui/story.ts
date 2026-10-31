@@ -1,13 +1,14 @@
 // The page, told as a data story: headline, the charts (filtered by model), every
 // result in a table, and how it was measured. The tester sits beside the charts.
 
-import { contextRows, tableRows, type ContextRow, type TableRow } from "../core/aggregate";
+import { contextRows, speechRows, tableRows, type ContextRow, type SpeechRow, type TableRow } from "../core/aggregate";
 import { deviceKey } from "../core/device";
 import { engineName, fmtSpeed, kvName } from "../core/format";
 import { DEFAULT_MODEL, GEN_TOKENS, MODELS, PROMPT_TOKENS, chatMemoryGB, modelById } from "../core/plan";
 import type { Result } from "../core/result";
 import { barChart, dotPlot, groupBars, type DotRow, type Series } from "./charts";
 import { h } from "./dom";
+import { renderSpeechTester } from "./speechtest";
 import { renderTester } from "./tester";
 
 const ENGINE_SERIES: Series[] = [
@@ -18,6 +19,10 @@ const KV_SERIES: Series[] = [
   { key: "f16", label: "16-bit memory", color: "var(--kv-16)" },
   { key: "q8_0", label: "8-bit memory", color: "var(--kv-8)" },
   { key: "q4_0", label: "4-bit memory", color: "var(--kv-4)" },
+];
+const SPEECH_SERIES: Series[] = [
+  { key: "webgpu", label: "Graphics chip (WebGPU)", color: "var(--gpu)" },
+  { key: "wasm", label: "Processor (WebAssembly)", color: "var(--cpu)" },
 ];
 const modelName = (id: string) => (modelById(id).id === id ? modelById(id).name : id);
 
@@ -50,6 +55,7 @@ export function renderStory(root: HTMLElement) {
   root.append(h("div", { class: "story" }, head, h("div", { class: "cols" }, main, aside)));
 
   const tester = renderTester(aside, (r) => { local.push(r); draw(); }, (id) => setModel(id));
+  const speechTester = renderSpeechTester(aside, (r) => { local.push(r); draw(); });
 
   function setModel(id: string) {
     model = id;
@@ -82,7 +88,8 @@ export function renderStory(root: HTMLElement) {
         memoryRows(rows, youKeys), (host, data) => dotPlot(host, data, KV_SERIES, { unit: "tok/s", title: `Writing speed by memory format, ${name}` }),
         { text: `No ${name} runs of the Full test yet. It runs wllama with 16, 8 and 4-bit memory.`, action: "Set up the Full test", prep: { pack: "full" } }),
       contextFigure(ctx, youKeys, name),
-      memoryFigure());
+      memoryFigure(),
+      ...speechFigures(speechRows(all()), youKeys));
     drawTable(rows, youKeys);
   }
 
@@ -98,6 +105,35 @@ export function renderStory(root: HTMLElement) {
       stat(String(devices), devices === 1 ? "device" : "devices", "tested"),
       longest?.largestOk ? stat(`${Math.round(longest.largestOk / 1024)}K`, "tokens", `longest chat, ${longest.device}`) : null,
     ].filter((x): x is HTMLDivElement => x !== null));
+  }
+
+  // Speech does not depend on the model tabs: one voice model and one listening model.
+  function speechFigures(rows: SpeechRow[], you: Set<string>) {
+    const make = (task: "speak" | "listen", title: string, sub: string) => {
+      const by = new Map<string, DotRow>();
+      for (const r of rows.filter((x) => x.task === task)) {
+        const row = by.get(r.dkey) ?? { id: r.dkey, label: r.device, you: you.has(r.dkey), values: [] };
+        const extra = task === "speak"
+          ? `${r.firstAudioMs ? `, first sentence in ${r.firstAudioMs < 1000 ? `${Math.round(r.firstAudioMs)} ms` : `${(r.firstAudioMs / 1000).toFixed(1)} s`}` : ""}${r.garbled ? ". Audio check failed: garbled" : ""}`
+          : r.wordErrors !== null ? `, ${Math.round(r.wordErrors * 100)}% of words missed` : "";
+        row.values.push({ series: r.backend, value: r.realTime, detail: `${r.realTime >= 10 ? Math.round(r.realTime) : r.realTime.toFixed(1)}× real time${extra}, ${r.runs} ${r.runs === 1 ? "run" : "runs"}` });
+        by.set(r.dkey, row);
+      }
+      const data = [...by.values()].sort((a, b) => Math.max(...b.values.map((v) => v.value)) - Math.max(...a.values.map((v) => v.value)));
+      const host = h("div", { class: "plot" });
+      const button = h("button", { class: "btn outline", type: "button" }, "Set up the speech test");
+      button.addEventListener("click", () => speechTester.prepare());
+      const fig = h("figure", { class: "fig" },
+        h("h2", {}, title), h("p", { class: "sub" }, sub),
+        data.length ? h("div", { class: "legend", "aria-hidden": "true" }, SPEECH_SERIES.map((s) => h("span", {}, h("i", { style: `background:${s.color}` }), s.label))) : null,
+        data.length ? host : h("div", { class: "empty-plot" }, h("p", {}, "No speech runs yet. The speech test speaks a short passage and listens to a recorded voice, on the graphics chip and the processor."), button));
+      if (data.length) requestAnimationFrame(() => cleanups.push(dotPlot(host, data, SPEECH_SERIES, { unit: "× real time", title })));
+      return fig;
+    };
+    return [
+      make("speak", "Speaking speed", "How fast each device turns text into a voice, as a multiple of real time: 10× makes ten seconds of speech in one second. Kokoro, an 82-million-parameter voice model."),
+      make("listen", "Listening speed", "How fast each device writes down eleven seconds of recorded speech, as a multiple of real time. Whisper base, English."),
+    ];
   }
 
   function memoryFigure() {
@@ -183,7 +219,7 @@ export function renderStory(root: HTMLElement) {
     });
     tableSec.replaceChildren(
       h("h2", { id: "res-h" }, "Every result"),
-      h("p", { class: "sub", hidden: !you.size }, "Yellow rows are your own runs, not yet shared."),
+      h("p", { class: "sub", hidden: !rows.some((r) => you.has(r.dkey)) }, "Yellow rows are your own runs, not yet shared."),
       rows.length ? h("div", { class: "tbl-wrap", tabindex: 0, "aria-label": "Results table" },
         h("table", { class: "tbl" },
           h("thead", {}, h("tr", {}, th("Device", "device"), th("Model"), th("Engine"), th("Memory", undefined, "wide"),
@@ -222,6 +258,8 @@ function method() {
       h("li", {}, h("b", {}, "Same work everywhere. "), `One untimed warm-up, then a ${PROMPT_TOKENS}-token prompt and exactly ${GEN_TOKENS} new tokens.`),
       h("li", {}, h("b", {}, "Writing "), "is new tokens per second. ", h("b", {}, "Reading "), "is prompt tokens per second. A token is about three quarters of a word."),
       h("li", {}, h("b", {}, "Memory format "), "is how the model stores the conversation (its KV cache). Speed is measured; accuracy is not."),
+      h("li", {}, h("b", {}, "Speech test. "), "Kokoro (82M) reads three sentences, about ten seconds of speech, after one untimed warm-up. Whisper base.en transcribes an eleven-second recording (President Kennedy, 1961, public domain). Both run through transformers.js, on the graphics chip and, if you tick it, the processor. The processor runs single-threaded, as on most published sites."),
+      h("li", {}, h("b", {}, "Audio check. "), "The listening model also transcribes the voice the speaking model made. If it misses more than 30% of the words, the voice is marked garbled. Some graphics chips silently produce broken audio; this catches it."),
       h("li", {}, h("b", {}, "Shared only if you choose. "), "The record holds device type, OS, browser, graphics chip, the name you typed and the speeds. No name, IP address or prompt."),
       h("li", {}, h("b", {}, "Open data. "), "Every result is in ", h("code", {}, "public/data/results.json"), ". MIT licence.")));
 }

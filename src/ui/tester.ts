@@ -5,12 +5,12 @@
 import { describeDevice, readBrowser, type Device } from "../core/device";
 import { answerSentence, engineName, fmtSpeed, kvName } from "../core/format";
 import { CONTEXT_WINDOWS, DEFAULT_MODEL, MODELS, downloadMB, modelById, planFor, type Pack, type PlannedTest } from "../core/plan";
-import { issueUrl, newResultId, validateResult, type ContextResult, type Result, type TestResult } from "../core/result";
+import { newResultId, type ContextResult, type Result, type TestResult } from "../core/result";
 import { rollingRates, tracePath } from "../core/trace";
 import type { Hooks } from "../engines/types";
 import { h, svg } from "./dom";
+import { shareActions } from "./share";
 
-const REPO = (import.meta.env.VITE_RESULTS_REPO as string | undefined) ?? "";
 const PHONE_LIMIT_MB = 900;
 const TRACE = { width: 64, height: 22 };
 
@@ -173,27 +173,10 @@ export function renderTester(root: HTMLElement, onResult: (r: Result) => void, o
 
     const ok = tests.filter((t) => t.status === "ok" && t.decodeTps);
     const best = ok.length ? Math.max(...ok.map((t) => t.decodeTps!)) : null;
-    const canShare = !!REPO && ok.length > 0 && validateResult(result).length === 0;
-    const share = h("button", { class: "btn primary", type: "button", disabled: !canShare }, "Add to public results");
-    const copy = h("button", { class: "btn outline", type: "button" }, "Copy result");
-    copy.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(JSON.stringify(result, null, 2)).catch(() => {});
-      copy.textContent = "Copied";
-      setTimeout(() => (copy.textContent = "Copy result"), 1600);
-    });
-    const why = !REPO ? "Sharing opens once this site is published with a results repository." : ok.length ? "" : "Only runs with a finished test can be shared.";
-    share.addEventListener("click", () => {
-      share.parentElement!.replaceWith(h("div", { class: "review" },
-        h("p", {}, h("b", {}, "This is everything that gets shared. "), "No name, account or IP address; GitHub shows your username on the issue you open."),
-        h("pre", {}, JSON.stringify(result, null, 2)),
-        h("a", { class: "btn primary block", href: issueUrl(REPO, result), target: "_blank", rel: "noopener" }, "Open GitHub to submit"),
-        h("p", { class: "note" }, "A check adds it to the charts within a few minutes.")));
-    });
     after.replaceChildren(h("div", { class: "readout", role: "status" },
       best ? h("div", {}, h("span", { class: "big" }, fmtSpeed(best)), " ", h("span", { class: "u" }, "tokens a second")) : null,
       h("p", {}, answerSentence(named, tests)),
-      h("div", { class: "row2" }, share, copy),
-      why ? h("p", { class: "note" }, why) : null));
+      ...shareActions(result, ok.length > 0)));
   }
 
   start.addEventListener("click", run);

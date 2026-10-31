@@ -5,6 +5,7 @@ import { deviceKey } from "./device";
 import { deviceName } from "./format";
 import { validateResult, type Engine, type KvFormat, type Result } from "./result";
 import { median } from "./stats";
+import { GARBLED, type Backend, type SpeechTask } from "./speech";
 
 export interface TableRow {
   key: string;
@@ -94,4 +95,44 @@ export function contextRows(results: unknown[]): ContextRow[] {
     });
   }
   return [...out.values()].sort((a, b) => b.largestOk - a.largestOk);
+}
+
+export interface SpeechRow {
+  dkey: string;
+  device: string;
+  task: SpeechTask;
+  backend: Backend;
+  realTime: number; // median, audio seconds per second of work
+  firstAudioMs: number | null; // speaking only, median
+  wordErrors: number | null; // median
+  garbled: boolean; // the median word errors are above the audio-check limit
+  runs: number;
+}
+
+// One row per device, task and backend, with the median of every finished run.
+export function speechRows(results: unknown[]): SpeechRow[] {
+  const seen = new Set<string>();
+  const groups = new Map<string, { r: Result; task: SpeechTask; backend: Backend; rt: number[]; first: number[]; err: number[] }>();
+  for (const raw of results) {
+    if (validateResult(raw).length) continue;
+    const r = raw as Result;
+    if (seen.has(r.id) || !r.speech) continue;
+    seen.add(r.id);
+    for (const s of r.speech) {
+      if (s.status !== "ok" || !s.realTime) continue;
+      const key = [deviceKey(r.device), s.task, s.backend].join("|");
+      const g = groups.get(key) ?? { r, task: s.task, backend: s.backend, rt: [], first: [], err: [] };
+      g.rt.push(s.realTime);
+      if (s.firstAudioMs) g.first.push(s.firstAudioMs);
+      if (s.wordErrors !== undefined) g.err.push(s.wordErrors);
+      groups.set(key, g);
+    }
+  }
+  return [...groups.values()].map((g) => {
+    const wordErrors = median(g.err);
+    return {
+      dkey: deviceKey(g.r.device), device: deviceName(g.r.device).replace(/^This /, ""), task: g.task, backend: g.backend,
+      realTime: median(g.rt)!, firstAudioMs: median(g.first), wordErrors, garbled: wordErrors !== null && wordErrors > GARBLED, runs: g.rt.length,
+    };
+  }).sort((a, b) => b.realTime - a.realTime);
 }

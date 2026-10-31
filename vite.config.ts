@@ -10,6 +10,7 @@ export default defineConfig({
   define: {
     __WEBLLM_VERSION__: JSON.stringify(version("@mlc-ai/web-llm")),
     __WLLAMA_VERSION__: JSON.stringify(version("@wllama/wllama")),
+    __TRANSFORMERS_VERSION__: JSON.stringify(version("@huggingface/transformers")),
     __APP_VERSION__: JSON.stringify(JSON.parse(readFileSync("package.json", "utf8")).version),
   },
   test: { environment: "node", include: ["test/**/*.test.ts"] },

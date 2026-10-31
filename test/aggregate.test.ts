@@ -48,3 +48,26 @@ describe("device grouping and context", () => {
     expect(rows.map((r) => [r.device, r.model, r.largestOk, r.runs])).toEqual([["MacBook", "Qwen3-0.6B", 32768, 2], ["Phone", "Qwen3-0.6B", 0, 1]]);
   });
 });
+
+import { speechRows } from "../src/core/aggregate";
+
+describe("speechRows", () => {
+  const step = (task: string, backend: string, realTime: number, wordErrors: number) => ({ task, engineVersion: "3.8.1", model: task === "speak" ? "Kokoro-82M" : "Whisper-base.en",
+    backend, dtype: "fp32", status: "ok", loadMs: 1000, audioSec: 9.6, computeMs: 500, realTime, ...(task === "speak" ? { firstAudioMs: 200 } : {}), wordErrors });
+  const run = (id: string, model: string, speech: unknown[]) => ({ ...res(id, model, 50), tests: [], speech });
+  it("takes the median per device, task and backend", () => {
+    const rows = speechRows([run("r-sssss1", "MacBook", [step("speak", "webgpu", 10, 0)]), run("r-sssss2", "MacBook", [step("speak", "webgpu", 30, 0.1)]),
+      run("r-sssss3", "MacBook", [step("speak", "webgpu", 20, 0)])] as any);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ device: "MacBook", task: "speak", backend: "webgpu", realTime: 20, runs: 3, garbled: false });
+  });
+  it("flags garbled speech from the audio check", () => {
+    const rows = speechRows([run("r-sssss1", "Laptop", [step("speak", "webgpu", 12, 0.9), step("speak", "wasm", 3, 0)])] as any);
+    expect(rows.find((r) => r.backend === "webgpu")!.garbled).toBe(true);
+    expect(rows.find((r) => r.backend === "wasm")!.garbled).toBe(false);
+  });
+  it("ignores failed steps and runs without speech", () => {
+    const failed = run("r-sssss1", "Phone", [{ task: "listen", engineVersion: "3.8.1", model: "Whisper-base.en", backend: "wasm", dtype: "q8", status: "failed", error: "oom" }]);
+    expect(speechRows([failed, res("r-aaaaaa9", "MacBook", 50)] as any)).toEqual([]);
+  });
+});

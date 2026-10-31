@@ -78,3 +78,27 @@ describe("GitHub issue round trip", () => {
     expect(parseIssueBody("```json\n{nope\n```")).toBeNull();
   });
 });
+
+describe("speech results", () => {
+  const base = () => JSON.parse(JSON.stringify(good())) as Record<string, unknown>;
+  const step = { task: "speak", engineVersion: "3.8.1", model: "Kokoro-82M", backend: "webgpu", dtype: "fp32", status: "ok", loadMs: 4200, audioSec: 9.6, computeMs: 640, realTime: 15, firstAudioMs: 230, wordErrors: 0 };
+  it("accepts a speech-only run", () => {
+    const r = { ...base(), tests: [], speech: [step, { ...step, task: "listen", model: "Whisper-base.en", firstAudioMs: undefined }] };
+    expect(validateResult(JSON.parse(JSON.stringify(r)))).toEqual([]);
+  });
+  it("still needs a test when there is no speech", () => {
+    expect(validateResult({ ...base(), tests: [] })).toContain("tests must have 1 to 12 entries");
+  });
+  it("rejects unknown backends and fields", () => {
+    const errs = validateResult({ ...base(), speech: [{ ...step, backend: "cuda", secret: 1 }] });
+    expect(errs).toContain("speech[0].backend is not valid");
+    expect(errs).toContain("unexpected field speech[0].secret");
+  });
+  it("requires timings on a finished step but not on a failed one", () => {
+    expect(validateResult({ ...base(), speech: [{ ...step, realTime: undefined }] })).toContain("speech[0].realTime is missing");
+    expect(validateResult({ ...base(), speech: [{ task: "listen", engineVersion: "3.8.1", model: "Whisper-base.en", backend: "wasm", dtype: "q8", status: "failed", error: "out of memory" }] })).toEqual([]);
+  });
+  it("keeps word errors between 0 and 1", () => {
+    expect(validateResult({ ...base(), speech: [{ ...step, wordErrors: 1.5 }] })).toContain("speech[0].wordErrors is out of range");
+  });
+});
