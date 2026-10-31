@@ -163,8 +163,9 @@ export function renderStory(root: HTMLElement) {
       }
       const data = [...by.values()].sort((a, b) => Math.max(...b.values.map((v) => v.value)) - Math.max(...a.values.map((v) => v.value)));
       const host = h("div", { class: "plot" });
-      const button = h("button", { class: "btn outline", type: "button" }, "Set up the speech test");
-      button.addEventListener("click", () => speechTester.prepare());
+      // Picks this chart's model in the test card and takes you there; Start stays the only button that runs.
+      const button = h("button", { class: "btn outline", type: "button" }, `Try ${speechModel(chosen)?.name ?? chosen} on this device`);
+      button.addEventListener("click", () => { speechTester.setModels(speakModel, listenModel); speechTester.prepare(); });
       const fig = h("figure", { class: "fig" },
         h("h2", {}, title), h("p", { class: "sub" }, sub),
         data.length ? h("div", { class: "legend", "aria-hidden": "true" }, SPEECH_SERIES.map((s) => h("span", {}, h("i", { style: `background:${s.color}` }), s.label))) : null,

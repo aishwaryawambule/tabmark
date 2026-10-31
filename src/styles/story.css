@@ -222,3 +222,8 @@ details.dev dd { margin: 0; }
 .views button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
 #speech-view .tabs + .tabs { border-bottom: 1px solid var(--rule); margin-top: 10px; }
 #speech-view .tabs:first-child { border-bottom: 0; padding-bottom: 0; }
+
+/* A chart's "Try … on this device" points you at the test card. */
+.card.flash { animation: flash 1.6s var(--ease); }
+@keyframes flash { 0%, 40% { box-shadow: 0 0 0 4px var(--hi), 0 0 0 5px var(--ink); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .card.flash { animation: none; outline: 3px solid var(--ink); outline-offset: 3px; } }
