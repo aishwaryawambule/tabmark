@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GARBLED, realTime, speechDownloadMB, speechPlan, wordErrorRate, words } from "../src/core/speech";
+import { GARBLED, SPEECH_MODELS, realTime, speechDownloadMB, speechPlan, wordErrorRate, words } from "../src/core/speech";
 
 describe("words", () => {
   it("lower-cases and drops punctuation", () => {
@@ -42,14 +42,28 @@ describe("realTime", () => {
 });
 
 describe("speechPlan", () => {
-  it("runs the graphics chip only by default", () => {
-    expect(speechPlan(false).map((s) => `${s.task}/${s.backend}`)).toEqual(["speak/webgpu", "listen/webgpu"]);
+  it("speaks then listens on the graphics chip by default", () => {
+    expect(speechPlan("Kokoro-82M", "Whisper-base.en", false).map((s) => `${s.task}/${s.model}/${s.backend}`))
+      .toEqual(["speak/Kokoro-82M/webgpu", "listen/Whisper-base.en/webgpu"]);
   });
   it("adds the processor when asked", () => {
-    expect(speechPlan(true).map((s) => s.backend)).toEqual(["webgpu", "webgpu", "wasm", "wasm"]);
+    expect(speechPlan("Kokoro-82M", "Whisper-base.en", true).map((s) => s.backend)).toEqual(["webgpu", "webgpu", "wasm", "wasm"]);
+  });
+  it("runs on the processor only without WebGPU", () => {
+    expect(speechPlan("Kokoro-82M", "Moonshine-tiny", false, false).map((s) => s.backend)).toEqual(["wasm", "wasm"]);
+  });
+  it("skips the processor for models too big to run there", () => {
+    expect(speechPlan("Supertonic", "Whisper-large-v3-turbo", true).map((s) => `${s.model}/${s.backend}`))
+      .toEqual(["Supertonic/webgpu", "Whisper-large-v3-turbo/webgpu", "Supertonic/wasm"]);
   });
   it("adds up the downloads", () => {
-    expect(speechDownloadMB(speechPlan(false))).toBe(532);
-    expect(speechDownloadMB(speechPlan(true))).toBe(701);
+    expect(speechDownloadMB(speechPlan("Kokoro-82M", "Whisper-base.en", false))).toBe(532);
+    expect(speechDownloadMB(speechPlan("Kokoro-82M", "Whisper-base.en", true))).toBe(701);
+  });
+  it("lists only open models, each with a licence and a GPU build", () => {
+    for (const m of SPEECH_MODELS) {
+      expect(m.licence).toMatch(/^(MIT|Apache-2.0|CC-BY-4.0|OpenRAIL-M)$/);
+      expect(m.gpu.mb).toBeGreaterThan(0);
+    }
   });
 });

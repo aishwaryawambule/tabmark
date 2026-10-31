@@ -5,7 +5,13 @@ How fast does AI run in your browser tab? Tabmark times a small language model, 
 - **Runs in the tab.** The model downloads into the browser and runs on the device's graphics chip through WebGPU. No server, no account.
 - **Two engines, three memory formats.** [WebLLM](https://github.com/mlc-ai/web-llm) and [wllama](https://github.com/ngxson/wllama) (llama.cpp) on the same model, with wllama's conversation memory (KV cache) in 16, 8 and 4 bits.
 - **Five models to pick from.** SmolLM2 360M, Qwen3 0.6B (default), Llama 3.2 1B, Qwen3 1.7B and Qwen3 4B, from about 0.2 to 2.3 GB. Qwen3 4B runs in WebLLM only: its llama.cpp file is over wllama's 2 GB single-file limit.
-- **Speaking and listening.** A separate speech test runs [Kokoro](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) (82M, text to speech) and [Whisper base.en](https://huggingface.co/onnx-community/whisper-base.en) (speech to text) through [transformers.js](https://github.com/huggingface/transformers.js), on the graphics chip (WebGPU) and the processor (WebAssembly), and reports each as a multiple of real time.
+- **Text and speech, side by side.** The page has two menus. **Text models** times the language models above. **Speech models** times open voice and listening models through [transformers.js](https://github.com/huggingface/transformers.js), on the graphics chip (WebGPU) and the processor (WebAssembly), as a multiple of real time:
+
+  | Voice models | Listening models |
+  | --- | --- |
+  | Kokoro 82M (Apache-2.0), Supertonic (OpenRAIL-M) | Whisper tiny, base, small (MIT), Whisper large-v3-turbo (MIT, graphics chip only), Moonshine tiny and base (MIT), Parakeet CTC 0.6B (CC-BY-4.0) |
+
+  Each was run end to end in Chrome before it was listed. SpeechT5 was tried and left out: it fails on WebGPU in transformers.js 3.8.
 - **Audio check.** The listening model also transcribes the voice the speaking model just made. If it misses more than 30% of the words, the run is marked garbled: some graphics chips silently produce broken audio (for example [onnxruntime#29807](https://github.com/microsoft/onnxruntime/issues/29807)), and nobody was measuring it across devices.
 - **Longest conversation.** Optionally loads the model with room for 4k to 32k tokens and reports the largest that fits.
 - **Crowdsourced and open.** Sharing opens a prefilled GitHub issue. A GitHub Action validates it and appends it to [`public/data/results.json`](public/data/results.json), which anyone can download.

@@ -214,3 +214,11 @@ details.dev dd { margin: 0; }
 /* Download size as a bar beside each model in the tester */
 .opt .size { display: block; height: 3px; background: var(--grid); margin-top: 5px; border-radius: 2px; }
 .opt .size i { display: block; height: 100%; background: var(--ink-3); border-radius: 2px; }
+
+/* Text | Speech: the two halves of the page */
+.views { display: flex; gap: 28px; border-bottom: 2px solid var(--ink); margin: 6px 0 22px; font-family: var(--sans); }
+.views button { font: 600 19px/1 var(--sans); background: none; border: 0; padding: 12px 0; margin-bottom: -2px; border-bottom: 4px solid transparent; color: var(--ink-3); cursor: pointer; }
+.views button:hover { color: var(--ink); }
+.views button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+#speech-view .tabs + .tabs { border-bottom: 1px solid var(--rule); margin-top: 10px; }
+#speech-view .tabs:first-child { border-bottom: 0; padding-bottom: 0; }

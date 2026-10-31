@@ -2,7 +2,7 @@
 // on WebGPU or WebAssembly. Each step loads its model, does one untimed warm-up (which
 // also compiles the GPU shaders), then times the same work on every device.
 
-import { CLIP, LISTEN, SPEAK, SPEAK_TEXT, realTime, wordErrorRate, type SpeechStep } from "../core/speech";
+import { CLIP, SPEAK_TEXT, realTime, wordErrorRate, type PlannedSpeech } from "../core/speech";
 import type { SpeechResult } from "../core/result";
 import type { Hooks } from "./types";
 
@@ -21,31 +21,53 @@ function progress(hooks: Hooks, label: string) {
   };
 }
 
-function failed(step: SpeechStep, e: unknown): SpeechResult {
+function failed(step: PlannedSpeech, e: unknown): SpeechResult {
   const error = (e instanceof Error ? e.message : String(e)).replace(/[^\p{L}\p{N} .,:;()_+\-/'#@&]/gu, " ").slice(0, 200);
   return { task: step.task, engineVersion: TRANSFORMERS_VERSION, model: step.model, backend: step.backend, dtype: step.dtype, status: "failed", error };
 }
 
 export interface Spoken { result: SpeechResult; audio?: Float32Array; sampleRate?: number }
 
-export async function runSpeak(step: SpeechStep, hooks: Hooks): Promise<Spoken> {
-  let tts: Awaited<ReturnType<typeof import("kokoro-js").KokoroTTS.from_pretrained>> | undefined;
-  try {
+// One voice model behind one interface: say a sentence, get samples back.
+interface Speaker { say(text: string): Promise<{ audio: Float32Array; sampling_rate: number }>; dispose(): Promise<void> }
+const VOICES: Record<string, string> = {
+  Supertonic: "https://huggingface.co/onnx-community/Supertonic-TTS-ONNX/resolve/main/voices/F1.bin",
+};
+
+async function loadSpeaker(step: PlannedSpeech, hooks: Hooks): Promise<Speaker> {
+  const progress_callback = progress(hooks, "Downloading") as never;
+  if (step.model === "Kokoro-82M") {
     const { KokoroTTS } = await import("kokoro-js");
+    const tts = await KokoroTTS.from_pretrained(step.repo, { dtype: step.load as never, device: step.backend, progress_callback });
+    return {
+      say: (text) => tts.generate(text, { voice: "af_heart" }) as never,
+      dispose: async () => { await tts.model.dispose(); },
+    };
+  }
+  const { pipeline } = await import("@huggingface/transformers");
+  const tts = (await pipeline("text-to-speech", step.repo, { device: step.backend, dtype: step.load as never, progress_callback })) as unknown as {
+    (text: string, opts: Record<string, unknown>): Promise<{ audio: Float32Array; sampling_rate: number }>; dispose(): Promise<void>;
+  };
+  const opts = { speaker_embeddings: VOICES[step.model], num_inference_steps: 5, speed: 1.0 };
+  return { say: (text) => tts(text, opts), dispose: () => tts.dispose() };
+}
+
+export interface Spoken { result: SpeechResult; audio?: Float32Array; sampleRate?: number }
+
+export async function runSpeak(step: PlannedSpeech, hooks: Hooks): Promise<Spoken> {
+  let speaker: Speaker | undefined;
+  try {
     const t0 = performance.now();
-    tts = await KokoroTTS.from_pretrained(SPEAK.repo, {
-      dtype: step.backend === "webgpu" ? "fp32" : "q8", device: step.backend,
-      progress_callback: progress(hooks, "Downloading") as never,
-    });
+    speaker = await loadSpeaker(step, hooks);
     const loadMs = Math.round(performance.now() - t0);
     hooks.status("Warming up");
-    await tts.generate("Hello there.", { voice: SPEAK.voice as never });
+    await speaker.say("Hello there.");
     hooks.status("Speaking");
     const parts: Float32Array[] = [];
     let sampleRate = 24000, firstAudioMs = 0;
     const start = performance.now();
     for (const sentence of SPEAK_TEXT) {
-      const out = await tts.generate(sentence, { voice: SPEAK.voice as never });
+      const out = await speaker.say(sentence);
       parts.push(out.audio);
       sampleRate = out.sampling_rate;
       if (!firstAudioMs) firstAudioMs = Math.round(performance.now() - start);
@@ -64,7 +86,7 @@ export async function runSpeak(step: SpeechStep, hooks: Hooks): Promise<Spoken> 
   } catch (e) {
     return { result: failed(step, e) };
   } finally {
-    await (tts?.model as { dispose?: () => Promise<void> } | undefined)?.dispose?.().catch(() => {});
+    await speaker?.dispose().catch(() => {});
   }
 }
 
@@ -90,29 +112,31 @@ export async function loadClip(): Promise<Float32Array> {
 
 // Listens to the human clip (timed, scored against its transcript), then to each voice
 // the speaking steps produced, to check that the speech came out as words.
-export async function runListen(step: SpeechStep, hooks: Hooks, clip: Float32Array, voices: Float32Array[]): Promise<{ result: SpeechResult; voiceErrors: number[] }> {
+export async function runListen(step: PlannedSpeech, hooks: Hooks, clip: Float32Array, voices: Float32Array[]): Promise<{ result: SpeechResult; voiceErrors: number[] }> {
   type Asr = { (audio: Float32Array): Promise<{ text: string } | { text: string }[]>; dispose(): Promise<void> };
   let asr: Asr | undefined;
   try {
     const { pipeline } = await import("@huggingface/transformers");
     const t0 = performance.now();
-    asr = (await pipeline("automatic-speech-recognition", LISTEN.repo, {
+    asr = (await pipeline("automatic-speech-recognition", step.repo, {
       device: step.backend,
-      dtype: step.backend === "webgpu" ? { encoder_model: "fp32", decoder_model_merged: "q4" } : "q8",
+      dtype: step.load as never,
       progress_callback: progress(hooks, "Downloading") as never,
     })) as unknown as Asr;
     const loadMs = Math.round(performance.now() - t0);
     const text = (o: { text: string } | { text: string }[]) => (Array.isArray(o) ? o.map((x) => x.text).join(" ") : o.text);
+    const multilingual = step.repo.includes("large-v3");
+    const hear = (a: Float32Array) => (multilingual ? (asr as unknown as (a: Float32Array, o: object) => ReturnType<Asr>)(a, { language: "english", task: "transcribe" }) : asr!(a));
     hooks.status("Warming up");
-    await asr(clip.subarray(0, 16000 * 2));
+    await hear(clip.subarray(0, 16000 * 2));
     hooks.status("Listening");
     const start = performance.now();
-    const heard = text(await asr(clip));
+    const heard = text(await hear(clip));
     const computeMs = Math.round(performance.now() - start);
     hooks.token(performance.now());
     const audioSec = round(clip.length / 16000);
     const voiceErrors: number[] = [];
-    for (const v of voices) voiceErrors.push(round(wordErrorRate(SPEAK_TEXT.join(" "), text(await asr(v))), 3));
+    for (const v of voices) voiceErrors.push(round(wordErrorRate(SPEAK_TEXT.join(" "), text(await hear(v))), 3));
     return {
       result: { task: "listen", engineVersion: TRANSFORMERS_VERSION, model: step.model, backend: step.backend, dtype: step.dtype, status: "ok",
         loadMs, audioSec, computeMs, realTime: round(realTime(audioSec, computeMs)), wordErrors: round(wordErrorRate(CLIP.text, heard), 3) },

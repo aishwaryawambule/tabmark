@@ -6,6 +6,7 @@ import { deviceKey } from "../core/device";
 import { engineName, fmtSpeed, kvName } from "../core/format";
 import { DEFAULT_MODEL, GEN_TOKENS, MODELS, PROMPT_TOKENS, chatMemoryGB, modelById } from "../core/plan";
 import type { Result } from "../core/result";
+import { DEFAULT_LISTEN, DEFAULT_SPEAK, listeners, speakers, speechModel } from "../core/speech";
 import { barChart, dotPlot, groupBars, type DotRow, type Series } from "./charts";
 import { h } from "./dom";
 import { renderSpeechTester } from "./speechtest";
@@ -30,13 +31,15 @@ export function renderStory(root: HTMLElement) {
   let published: unknown[] = [];
   const local: Result[] = [];
   let model = DEFAULT_MODEL;
+  let view: "text" | "speech" = location.hash === "#speech" ? "speech" : "text";
+  let speakModel = DEFAULT_SPEAK, listenModel = DEFAULT_LISTEN;
   let loadState: "loading" | "ok" | "failed" = "loading";
   const cleanups: (() => void)[] = [];
 
   const meta = h("p", { class: "meta" }, "Loading results");
   const head = h("header", { class: "head" },
     h("h1", {}, "How fast can a browser tab run AI?"),
-    h("p", { class: "deck" }, "Real phones and laptops, timing small AI models inside a web page."),
+    h("p", { class: "deck" }, "Real phones and laptops, timing small open AI models inside a web page: language models that write, and speech models that talk and listen."),
     meta);
 
   const tabs = h("div", { class: "tabs", role: "group", "aria-label": "Model" }, h("span", { class: "lab" }, "Model"));
@@ -47,15 +50,46 @@ export function renderStory(root: HTMLElement) {
     return b;
   });
 
+  const viewText = h("button", { type: "button", role: "tab", id: "view-text" }, "Text models");
+  const viewSpeech = h("button", { type: "button", role: "tab", id: "view-speech" }, "Speech models");
+  const views = h("div", { class: "views", role: "tablist", "aria-label": "What to compare" }, viewText, viewSpeech);
+  viewText.addEventListener("click", () => setView("text"));
+  viewSpeech.addEventListener("click", () => setView("speech"));
+  addEventListener("hashchange", () => { if (location.hash === "#speech" || location.hash === "#text") setView(location.hash.slice(1) as "text" | "speech", false); });
+
+  const speechTabRow = (label: string, list: ReturnType<typeof speakers>, current: () => string, set: (id: string) => void) => {
+    const row = h("div", { class: "tabs", role: "group", "aria-label": label }, h("span", { class: "lab" }, label));
+    const buttons = list.map((m) => {
+      const b = h("button", { class: "tab", type: "button", "aria-pressed": String(m.id === current()) }, m.name);
+      b.addEventListener("click", () => { set(m.id); speechTester.setModels(speakModel, listenModel); draw(); });
+      row.append(b);
+      return { b, id: m.id };
+    });
+    return { row, sync: () => buttons.forEach(({ b, id }) => b.setAttribute("aria-pressed", String(id === current()))) };
+  };
+  const voiceTabs = speechTabRow("Voice", speakers(), () => speakModel, (id) => (speakModel = id));
+  const listenTabs = speechTabRow("Listening", listeners(), () => listenModel, (id) => (listenModel = id));
+  const speechFigs = h("div");
+  const speechTable = h("section", { class: "section", "aria-labelledby": "sres-h" });
+
   const stats = h("div", { class: "stats" });
   const figs = h("div");
   const tableSec = h("section", { class: "section", id: "results", "aria-labelledby": "res-h" });
-  const main = h("div", {}, tabs, stats, figs, tableSec, method());
+  const textMain = h("div", { id: "text" }, tabs, stats, figs, tableSec);
+  const speechMain = h("div", { id: "speech-view" }, voiceTabs.row, listenTabs.row, speechFigs, speechTable);
+  const main = h("div", {}, views, textMain, speechMain, method());
   const aside = h("aside", { class: "aside", id: "test" });
   root.append(h("div", { class: "story" }, head, h("div", { class: "cols" }, main, aside)));
 
   const tester = renderTester(aside, (r) => { local.push(r); draw(); }, (id) => setModel(id));
-  const speechTester = renderSpeechTester(aside, (r) => { local.push(r); draw(); });
+  const speechTester = renderSpeechTester(aside, (r) => { local.push(r); draw(); }, (sp, li) => { speakModel = sp; listenModel = li; draw(); });
+  const textCard = aside.querySelector<HTMLElement>("section[aria-labelledby='test-h']")!, speechCard = aside.querySelector<HTMLElement>("#speech-test")!;
+
+  function setView(v: "text" | "speech", push = true) {
+    view = v;
+    if (push) history.replaceState(null, "", v === "speech" ? "#speech" : "#text");
+    draw();
+  }
 
   function setModel(id: string) {
     model = id;
@@ -67,6 +101,11 @@ export function renderStory(root: HTMLElement) {
 
   function draw() {
     for (const c of cleanups.splice(0)) c();
+    viewText.setAttribute("aria-selected", String(view === "text"));
+    viewSpeech.setAttribute("aria-selected", String(view === "speech"));
+    textMain.hidden = textCard.hidden = view !== "text";
+    speechMain.hidden = speechCard.hidden = view !== "speech";
+    voiceTabs.sync(); listenTabs.sync();
     const rows = tableRows(all());
     const youKeys = new Set(local.map((r) => deviceKey(r.device)));
     const runs = (published as Result[]).length;
@@ -88,9 +127,11 @@ export function renderStory(root: HTMLElement) {
         memoryRows(rows, youKeys), (host, data) => dotPlot(host, data, KV_SERIES, { unit: "tok/s", title: `Writing speed by memory format, ${name}` }),
         { text: `No ${name} runs of the Full test yet. It runs wllama with 16, 8 and 4-bit memory.`, action: "Set up the Full test", prep: { pack: "full" } }),
       contextFigure(ctx, youKeys, name),
-      memoryFigure(),
-      ...speechFigures(speechRows(all()), youKeys));
+      memoryFigure());
     drawTable(rows, youKeys);
+    const sRows = speechRows(all());
+    speechFigs.replaceChildren(...speechFigures(sRows, youKeys));
+    drawSpeechTable(sRows, youKeys);
   }
 
   function drawStats(rows: TableRow[], ctx: ContextRow[]) {
@@ -111,7 +152,8 @@ export function renderStory(root: HTMLElement) {
   function speechFigures(rows: SpeechRow[], you: Set<string>) {
     const make = (task: "speak" | "listen", title: string, sub: string) => {
       const by = new Map<string, DotRow>();
-      for (const r of rows.filter((x) => x.task === task)) {
+      const chosen = task === "speak" ? speakModel : listenModel;
+      for (const r of rows.filter((x) => x.task === task && x.model === chosen)) {
         const row = by.get(r.dkey) ?? { id: r.dkey, label: r.device, you: you.has(r.dkey), values: [] };
         const extra = task === "speak"
           ? `${r.firstAudioMs ? `, first sentence in ${r.firstAudioMs < 1000 ? `${Math.round(r.firstAudioMs)} ms` : `${(r.firstAudioMs / 1000).toFixed(1)} s`}` : ""}${r.garbled ? ". Audio check failed: garbled" : ""}`
@@ -126,13 +168,13 @@ export function renderStory(root: HTMLElement) {
       const fig = h("figure", { class: "fig" },
         h("h2", {}, title), h("p", { class: "sub" }, sub),
         data.length ? h("div", { class: "legend", "aria-hidden": "true" }, SPEECH_SERIES.map((s) => h("span", {}, h("i", { style: `background:${s.color}` }), s.label))) : null,
-        data.length ? host : h("div", { class: "empty-plot" }, h("p", {}, "No speech runs yet. The speech test speaks a short passage and listens to a recorded voice, on the graphics chip and the processor."), button));
+        data.length ? host : h("div", { class: "empty-plot" }, h("p", {}, `No ${speechModel(chosen)?.name ?? chosen} runs yet. The speech test runs it in this tab on the graphics chip, and the processor if you tick it.`), button));
       if (data.length) requestAnimationFrame(() => cleanups.push(dotPlot(host, data, SPEECH_SERIES, { unit: "× real time", title })));
       return fig;
     };
     return [
-      make("speak", "Speaking speed", "How fast each device turns text into a voice, as a multiple of real time: 10× makes ten seconds of speech in one second. Kokoro, an 82-million-parameter voice model."),
-      make("listen", "Listening speed", "How fast each device writes down eleven seconds of recorded speech, as a multiple of real time. Whisper base, English."),
+      make("speak", `Speaking speed, ${speechModel(speakModel)!.name}`, "How fast each device turns text into a voice, as a multiple of real time: 10× makes ten seconds of speech in one second. Dots over 1× can talk live."),
+      make("listen", `Listening speed, ${speechModel(listenModel)!.name}`, "How fast each device writes down eleven seconds of recorded speech, as a multiple of real time."),
     ];
   }
 
@@ -202,6 +244,27 @@ export function renderStory(root: HTMLElement) {
     return fig;
   }
 
+  // Every speech result, all models: one row per device, model and chip.
+  function drawSpeechTable(rows: ReturnType<typeof speechRows>, you: Set<string>) {
+    const fx = (x: number) => (x >= 10 ? String(Math.round(x)) : x.toFixed(1));
+    const sorted = [...rows].sort((a, b) => a.task.localeCompare(b.task) || b.realTime - a.realTime);
+    speechTable.replaceChildren(
+      h("h2", { id: "sres-h" }, "Every speech result"),
+      h("p", { class: "sub", hidden: !rows.some((r) => you.has(r.dkey)) }, "Yellow rows are your own runs, not yet shared."),
+      rows.length ? h("div", { class: "tbl-wrap", tabindex: 0, "aria-label": "Speech results table" },
+        h("table", { class: "tbl" },
+          h("thead", {}, h("tr", {}, ...["Device", "Model", "Chip", "× real time", "First sentence", "Words missed", "Runs"].map((x, i) => h("th", { scope: "col", class: i >= 3 ? "r" : undefined }, x)))),
+          h("tbody", {}, sorted.map((r) => h("tr", { class: you.has(r.dkey) ? "you" : undefined },
+            h("td", {}, r.device),
+            h("td", {}, `${speechModel(r.model)?.name ?? r.model} (${r.task === "speak" ? "voice" : "listening"})`),
+            h("td", { class: "eng" }, h("span", { class: "key", style: `background:var(--${r.backend === "webgpu" ? "gpu" : "cpu"})` }), r.backend === "webgpu" ? "Graphics chip" : "Processor"),
+            h("td", { class: "r num" }, fx(r.realTime)),
+            h("td", { class: "r num" }, r.firstAudioMs ? (r.firstAudioMs < 1000 ? `${Math.round(r.firstAudioMs)} ms` : `${(r.firstAudioMs / 1000).toFixed(1)} s`) : "—"),
+            h("td", { class: "r num" }, r.wordErrors === null ? "—" : `${Math.round(r.wordErrors * 100)}%${r.garbled ? " (garbled)" : ""}`),
+            h("td", { class: "r num" }, r.runs))))))
+        : h("p", { class: "empty-plot" }, "No speech results yet. Run the speech test to add the first row."));
+  }
+
   let sort: { key: "decodeTps" | "prefillTps" | "device"; dir: 1 | -1 } = { key: "decodeTps", dir: -1 };
   function drawTable(rows: TableRow[], you: Set<string>) {
     const th = (label: string, key?: typeof sort.key, cls = "") => {
@@ -258,7 +321,7 @@ function method() {
       h("li", {}, h("b", {}, "Same work everywhere. "), `One untimed warm-up, then a ${PROMPT_TOKENS}-token prompt and exactly ${GEN_TOKENS} new tokens.`),
       h("li", {}, h("b", {}, "Writing "), "is new tokens per second. ", h("b", {}, "Reading "), "is prompt tokens per second. A token is about three quarters of a word."),
       h("li", {}, h("b", {}, "Memory format "), "is how the model stores the conversation (its KV cache). Speed is measured; accuracy is not."),
-      h("li", {}, h("b", {}, "Speech test. "), "Kokoro (82M) reads three sentences, about ten seconds of speech, after one untimed warm-up. Whisper base.en transcribes an eleven-second recording (President Kennedy, 1961, public domain). Both run through transformers.js, on the graphics chip and, if you tick it, the processor. The processor runs single-threaded, as on most published sites."),
+      h("li", {}, h("b", {}, "Speech test. "), "The voice model you pick reads three sentences, about ten seconds of speech, after one untimed warm-up. The listening model you pick transcribes an eleven-second recording (President Kennedy, 1961, public domain). Every model is open and runs through transformers.js, on the graphics chip and, if you tick it, the processor. The processor runs single-threaded, as on most published sites. Speed is × real time: seconds of audio per second of work."),
       h("li", {}, h("b", {}, "Audio check. "), "The listening model also transcribes the voice the speaking model made. If it misses more than 30% of the words, the voice is marked garbled. Some graphics chips silently produce broken audio; this catches it."),
       h("li", {}, h("b", {}, "Shared only if you choose. "), "The record holds device type, OS, browser, graphics chip, the name you typed and the speeds. No name, IP address or prompt."),
       h("li", {}, h("b", {}, "Open data. "), "Every result is in ", h("code", {}, "public/data/results.json"), ". MIT licence.")));

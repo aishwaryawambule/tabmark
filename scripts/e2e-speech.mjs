@@ -1,5 +1,5 @@
 // Runs the speech test in headless Chrome with WebGPU and saves the result.
-//   node scripts/e2e-speech.mjs http://localhost:5173/ out.json shots [gpu-only]
+//   SPEAK=Kokoro-82M LISTEN=Whisper-base.en node scripts/e2e-speech.mjs http://localhost:5173/ out.json shots [gpu-only]
 // Fails on any uncaptured WebGPU error, like scripts/e2e.mjs.
 import puppeteer from "puppeteer-core";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -28,8 +28,9 @@ try {
   });
   page.on("pageerror", (e) => { failed = e.message; console.error("page error:", e.message); });
   page.on("console", (m) => /error/i.test(m.type()) && console.error("console:", m.text().slice(0, 300)));
-  await page.goto(base, { waitUntil: "networkidle0" });
+  await page.goto(`${base}#speech`, { waitUntil: "networkidle0" });
   await page.waitForSelector("#speech-test .btn.primary:not([disabled])");
+  for (const [name, id] of [["speak-model", process.env.SPEAK], ["listen-model", process.env.LISTEN]]) if (id) await page.$eval(`input[name="${name}"][value="${id}"]`, (el) => el.click());
   if (only === "gpu-only") await page.$eval("#speech-cpu", (el) => el.click());
   await page.$eval("#speech-test .btn.primary", (el) => el.click());
   const t0 = Date.now();

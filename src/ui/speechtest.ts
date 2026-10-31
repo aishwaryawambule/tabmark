@@ -4,7 +4,7 @@
 
 import { describeDevice, readBrowser, type Device } from "../core/device";
 import { newResultId, type Result, type SpeechResult } from "../core/result";
-import { GARBLED, speechDownloadMB, speechPlan, type SpeechStep } from "../core/speech";
+import { DEFAULT_LISTEN, DEFAULT_SPEAK, GARBLED, listeners, speakers, speechDownloadMB, speechModel, speechPlan, type SpeechModel, type SpeechStep } from "../core/speech";
 import type { Hooks } from "../engines/types";
 import { h } from "./dom";
 import { shareActions } from "./share";
@@ -16,11 +16,12 @@ const fmtMs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1
 // Below 1× the work takes longer than the audio lasts: say so plainly.
 const pace = (x: number) => (x >= 1 ? `${fmtX(x)} times faster than real time.` : `slower than real time: ten seconds of audio take about ${Math.round(10 / x)} seconds.`);
 
-export function renderSpeechTester(root: HTMLElement, onResult: (r: Result) => void) {
+export function renderSpeechTester(root: HTMLElement, onResult: (r: Result) => void, onModels: (speak: string, listen: string) => void) {
   let device: Device | null = null;
   let running = false;
   let gpu = false;
-  const planNow = () => speechPlan(cpu.checked || !gpu).filter((s) => gpu || s.backend === "wasm");
+  let speakId = DEFAULT_SPEAK, listenId = DEFAULT_LISTEN;
+  const planNow = () => speechPlan(speakId, listenId, cpu.checked, gpu);
   const card = h("section", { class: "card", id: "speech-test", "aria-labelledby": "speech-h" });
   root.append(card);
 
@@ -29,10 +30,26 @@ export function renderSpeechTester(root: HTMLElement, onResult: (r: Result) => v
   const note = h("p", { class: "note" });
   const steps = h("ol", { class: "steps", hidden: true, "aria-label": "Speech test steps" });
   const after = h("div");
+  // Two pickers: one voice model and one listening model, all open, all run in this tab.
+  const picker = (legend: string, name: string, list: SpeechModel[], current: () => string, set: (id: string) => void) => {
+    const fs = h("fieldset", {}, h("legend", {}, legend));
+    const biggest = Math.max(...list.map((m) => m.gpu.mb));
+    for (const m of list) {
+      const input = h("input", { type: "radio", name, value: m.id, checked: m.id === current() });
+      input.addEventListener("change", () => { set(m.id); onModels(speakId, listenId); draw(); });
+      fs.append(h("label", { class: "opt" }, input,
+        h("span", {}, m.name, h("small", {}, `${m.note} ${m.licence}.`), h("span", { class: "size", "aria-hidden": "true" }, h("i", { style: `width:${(m.gpu.mb / biggest) * 100}%` }))),
+        h("span", { class: "mb" }, `${m.gpu.mb.toLocaleString("en-US")} MB`)));
+    }
+    return fs;
+  };
+  const speakPick = picker("Voice model", "speak-model", speakers(), () => speakId, (id) => (speakId = id));
+  const listenPick = picker("Listening model", "listen-model", listeners(), () => listenId, (id) => (listenId = id));
   card.append(
     h("h2", { id: "speech-h" }, "Test speaking and listening"),
     h("p", { class: "intro" }, "A voice model reads a short passage aloud and a listening model writes down what it hears, both in this tab. Then the listener checks the voice, so broken audio shows up."),
-    h("label", { class: "chk", for: "speech-cpu" }, cpu, h("span", {}, "Also run them on the processor, to compare with the graphics chip")),
+    speakPick, listenPick,
+    h("label", { class: "chk", for: "speech-cpu" }, cpu, h("span", {}, "Also run them on the processor, to compare with the graphics chip (skipped for models too big for it)")),
     start, note, steps, after);
 
   const draw = () => (note.textContent = `Downloads ${speechDownloadMB(planNow()).toLocaleString("en-US")} MB the first time; later runs use the saved copy.`);
@@ -40,7 +57,7 @@ export function renderSpeechTester(root: HTMLElement, onResult: (r: Result) => v
 
   function stepRow(s: SpeechStep) {
     const st = h("span", { class: "st" }, "Waiting"), sp = h("span", { class: "sp" }), bar = h("span", { class: "bar", hidden: true }, h("i"));
-    const li = h("li", {}, h("span", { class: "nm" }, `${TASK[s.task]}, ${BACKEND[s.backend]}`), st, sp, bar);
+    const li = h("li", {}, h("span", { class: "nm" }, `${speechModel(s.model)?.name ?? s.model}, ${BACKEND[s.backend]}`), st, sp, bar);
     const hooks: Hooks = {
       status(text, fraction) {
         st.textContent = text;
@@ -55,6 +72,7 @@ export function renderSpeechTester(root: HTMLElement, onResult: (r: Result) => v
     if (!device || running) return;
     running = true;
     start.disabled = cpu.disabled = true;
+    for (const el of card.querySelectorAll<HTMLInputElement>("input[type=radio]")) el.disabled = true;
     after.replaceChildren();
     const plan = planNow();
     const rows = plan.map(stepRow);
@@ -89,6 +107,7 @@ export function renderSpeechTester(root: HTMLElement, onResult: (r: Result) => v
     running = false;
     start.disabled = false;
     cpu.disabled = !gpu;
+    for (const el of card.querySelectorAll<HTMLInputElement>("input[type=radio]")) el.disabled = false;
     start.textContent = "Run again";
     start.className = "btn outline block";
   }
@@ -104,7 +123,7 @@ export function renderSpeechTester(root: HTMLElement, onResult: (r: Result) => v
     const ok = speech.filter((s) => s.status === "ok");
     const speakGpu = ok.find((s) => s.task === "speak" && s.backend === "webgpu");
     const lines: string[] = [];
-    for (const s of ok) lines.push(`${TASK[s.task]} on the ${BACKEND[s.backend]}: ${pace(s.realTime!)}`);
+    for (const s of ok) lines.push(`${speechModel(s.model)?.name ?? s.model}, ${TASK[s.task].toLowerCase()} on the ${BACKEND[s.backend]}: ${pace(s.realTime!)}`);
     const checks = ok.filter((s) => s.task === "speak" && s.wordErrors !== undefined);
     const bad = checks.filter((s) => s.wordErrors! > GARBLED);
     const check = !checks.length ? null
@@ -140,6 +159,12 @@ export function renderSpeechTester(root: HTMLElement, onResult: (r: Result) => v
   })();
 
   return {
+    setModels(speak?: string, listen?: string) {
+      if (running) return;
+      if (speak) { speakId = speak; card.querySelector<HTMLInputElement>(`input[name="speak-model"][value="${speak}"]`)!.checked = true; }
+      if (listen) { listenId = listen; card.querySelector<HTMLInputElement>(`input[name="listen-model"][value="${listen}"]`)!.checked = true; }
+      draw();
+    },
     prepare() {
       if (running) return;
       card.scrollIntoView({ behavior: "smooth", block: "start" });
