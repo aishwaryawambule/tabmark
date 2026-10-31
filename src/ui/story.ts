@@ -122,10 +122,10 @@ export function renderStory(root: HTMLElement) {
     figs.replaceChildren(
       figure("Writing speed", "How fast each device writes new text. Tokens per second, 16-bit memory.", ENGINE_SERIES,
         speedRows(rows, youKeys), (host, data) => dotPlot(host, data, ENGINE_SERIES, { unit: "tok/s", title: `Writing speed by device, ${name}` }),
-        { text: `No ${name} runs yet.`, action: "Set up the test", prep: {} }),
+        { text: `No ${name} runs yet.`, action: `Try ${name} on this device`, prep: {} }),
       figure("Smaller memory, same model", "How much speed you lose by storing the conversation in 8 or 4 bits instead of 16. Fewer bits fit longer chats. Tokens per second, wllama.", KV_SERIES,
         memoryRows(rows, youKeys), (host, data) => dotPlot(host, data, KV_SERIES, { unit: "tok/s", title: `Writing speed by memory format, ${name}` }),
-        { text: `No ${name} runs of the Full test yet. It runs wllama with 16, 8 and 4-bit memory.`, action: "Set up the Full test", prep: { pack: "full" } }),
+        { text: `No ${name} runs of the Full test yet. It runs wllama with 16, 8 and 4-bit memory.`, action: `Try the Full test with ${name}`, prep: { pack: "full" } }),
       contextFigure(ctx, youKeys, name),
       memoryFigure());
     drawTable(rows, youKeys);
@@ -240,7 +240,7 @@ export function renderStory(root: HTMLElement) {
     const fig = h("figure", { class: "fig" },
       h("h2", {}, "Longest conversation that loaded"),
       h("p", { class: "sub" }, "The longest chat each device's memory could hold. Tokens, WebLLM."),
-      data.length ? host : emptyBox({ text: `No ${name} runs with the conversation check yet. It loads the model with room for 4,096 up to 32,768 tokens.`, action: "Set up the conversation check", prep: { probe: true } }));
+      data.length ? host : emptyBox({ text: `No ${name} runs with the conversation check yet. It loads the model with room for 4,096 up to 32,768 tokens.`, action: `Try the conversation check with ${name}`, prep: { probe: true } }));
     if (data.length) requestAnimationFrame(() => cleanups.push(barChart(host, data, { unit: "tokens", title: `Longest conversation, ${name}`, color: "var(--webllm)" })));
     return fig;
   }

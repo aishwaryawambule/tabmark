@@ -217,6 +217,9 @@ export function renderTester(root: HTMLElement, onResult: (r: Result) => void, o
       draw();
       card.scrollIntoView({ behavior: "smooth", block: "start" });
       start.focus({ preventScroll: true });
+      card.classList.remove("flash");
+      void card.offsetWidth; // restart the highlight if pressed twice
+      card.classList.add("flash");
     },
   };
 }
